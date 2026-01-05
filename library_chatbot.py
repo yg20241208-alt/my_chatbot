@@ -25,97 +25,7 @@ from langchain_community.chat_message_histories.streamlit import StreamlitChatMe
 from langchain_chroma import Chroma
 
 # -------------------------------------------------------------------
-# ✅ API Key (Streamlit secrets 또는 환경변수에서만 읽기)
-# -------------------------------------------------------------------
-if not os.getenv("OPENAI_API_KEY"):
-    # secrets.toml에 OPENAI_API_KEY가 있는 경우 자동 주입
-    if "OPENAI_API_KEY" in st.secrets:
-        os.environ["OPENAI_API_KEY"] = st.secrets["OPENAI_API_KEY"]
-
-# -------------------------------------------------------------------
-# ✅ 캐시 함수들
-# -------------------------------------------------------------------
-@st.cache_resource(show_spinner=False)
-def load_and_split_pdf(file_path: str):
-    loader = PyPDFLoader(file_path)
-    return loader.load_and_split()
-
-@st.cache_resource(show_spinner=False)
-def build_or_load_vectorstore(_docs, persist_directory: str = "./chroma_db"):
-    embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
-
-    # 기존 DB가 있으면 로드 시도
-    if os.path.isdir(persist_directory) and any(os.scandir(persist_directory)):
-        try:
-            return Chroma(persist_directory=persist_directory, embedding_function=embeddings)
-        except Exception:
-            # 손상/버전불일치 등의 이유로 로드 실패하면 새로 생성
-            pass
-
-    # 새로 생성
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=0)
-    split_docs = text_splitter.split_documents(_docs)
-    return Chroma.from_documents(
-        split_docs,
-        embeddings,
-        persist_directory=persist_directory,
-    )
-
-@st.cache_resource(show_spinner=False)
-def initialize_chain(selected_model: str, pdf_path: str):
-    pages = load_and_split_pdf(pdf_path)
-    vectorstore = build_or_load_vectorstore(pages)
-    retriever = vectorstore.as_retriever()
-
-    # 질문 재구성 프롬프트
-    contextualize_q_system_prompt = (
-        "Given a chat history and the latest user question which might reference context "
-        "in the chat history, formulate a standalone question which can be understood "
-        "without the chat history. Do NOT answer the question, just reformulate it if "
-        "needed and otherwise return it as is."
-    )
-    contextualize_q_prompt = ChatPromptTemplate.from_messages(
-        [
-            ("system", contextualize_q_system_prompt),
-            MessagesPlaceholder("history"),
-            ("human", "{input}"),
-        ]
-    )
-
-    # QA 프롬프트
-    qa_system_prompt = (
-        "You are an assistant for question-answering tasks. "
-        "Use the following pieces of retrieved context to answer the question. "
-        "If you don't know the answer, just say that you don't know. "
-        "Keep the answer perfect. please use emoji with the answer. "
-        "대답은 한국어로 하고, 존댓말을 써줘.\n\n"
-        "{context}"
-    )
-    qa_prompt = ChatPromptTemplate.from_messages(
-        [
-            ("system", qa_system_prompt),
-            MessagesPlaceholder("history"),
-            ("human", "{input}"),
-        ]
-    )
-
-    llm = ChatOpenAI(model=selected_model)
-    history_aware_retriever = create_history_aware_retriever(llm, retriever, contextualize_q_prompt)
-    question_answer_chain = create_stuff_documents_chain(llm, qa_prompt)
-    rag_chain = create_retrieval_chain(history_aware_retriever, question_answer_chain)
-    return rag_chain
-
-# -------------------------------------------------------------------
-# ✅ Streamlit UI
-# -------------------------------------------------------------------
-st.set_page_config(page_title="감정공감챗봇", page_icon="📚")
-st.header("감정공감챗봇 💬📚")
-
-# 모델 선택
-option = st.selectbox("Select GPT Model", ("gpt-4o-mini", "gpt-3.5-turbo-0125"))
-
-# PDF 선택: (1) 레포에 있는 기본 PDF 경로, (2) 업로드
-DEFAULT_PDF = "감정공감챗봇.pdf"
+# ✅ API Key (Str돌.pdf"
 
 uploaded = st.file_uploader("PDF를 업로드하거나, 기본 PDF로 실행하세요.", type=["pdf"])
 pdf_path = None
@@ -165,5 +75,6 @@ if prompt_message := st.chat_input("질문을 입력하세요"):
                 for doc in response.get("context", []):
                     src = doc.metadata.get("source", "source")
                     st.markdown(src, help=doc.page_content)
+
 
 
